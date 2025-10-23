@@ -9,6 +9,12 @@
 const char* WIFI_SSID = "IFCE";
 const char* WIFI_PASS = "IFCE1234";
 
+//========Comando Buzzer============
+//IFCE_Iran/buzzer_control
+//IFCE_Iran/display_msg
+
+
+
 // ====== CONFIG MQTT ======
 const char* MQTT_HOST = "broker.hivemq.com";
 const uint16_t MQTT_PORT = 1883;
@@ -16,18 +22,18 @@ String clientId = "franzininho-" + String((uint32_t)ESP.getEfuseMac(), HEX);
 
 // ====== DHT ======
 #define DHTPIN 15
-#define DHTTYPE DHT11
+#define DHTTYPE DHT11 
 DHT dht(DHTPIN, DHTTYPE);
-
-//========Comando Buzzer============
-//IFCE_Iran/buzzer_control 100/1000/2000
 
 // ====== TOPICOS MQTT ======
 const char* TOPIC_BTN = "IFCE_Iran/botoes";
-const char* TOPIC_TOUCH = "IFCE_Iran/touch";
 const char* TOPIC_BUZZER_CONTROL = "IFCE_Iran/buzzer_control";
 const char* TOPIC_BUZZER_STATUS = "IFCE_Iran/buzzer_status";
 const char* TOPIC_LED_STATUS = "IFCE_Iran/led_status";
+const char* TOPIC_DISPLAY_MSG = "IFCE_Iran/display_msg";
+const char* TOPIC_TEMPERATURA = "IFCE_Iran/temperatura";
+const char* TOPIC_UMIDADE = "IFCE_Iran/umidade";
+const char* TOPIC_LUMINOSIDADE = "IFCE_Iran/luminosidade";
 
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
@@ -45,13 +51,7 @@ PubSubClient mqtt(espClient);
 #define BTN5_PIN 6
 #define BTN6_PIN 7
 
-#define TOUCH1_PIN 8
-#define TOUCH2_PIN 9
-#define TOUCH3_PIN 10
-#define TOUCH4_PIN 11
-#define TOUCH5_PIN 16
-#define TOUCH6_PIN 18
-#define TOUCH_THRESHOLD 1000
+#define LDR_PIN 1  // Pino analógico para sensor de luminosidade (LDR)
 
 // ====== DISPLAY OLED ======
 #define OLED_SDA_PIN 8  // Se não funcionar, teste com 41
@@ -64,11 +64,14 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ====== VARIÁVEIS ======
 bool lastBtn[6] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};
-bool lastTouch[6] = {false, false, false, false, false, false};
 bool ledState = false;
 unsigned long lastLedToggle = 0;
 unsigned long lastDisplayUpdate = 0;
+unsigned long lastSensorUpdate = 0;
 bool displayOK = false;
+String scrollingMsg = ""; // mensagem atual
+unsigned long scrollTimer = 0;
+int scrollX = SCREEN_WIDTH;
 
 // ====== FUNÇÕES ======
 
@@ -80,6 +83,34 @@ void connectWiFi() {
     delay(500);
   }
   Serial.println("\nWiFi conectado: " + WiFi.localIP().toString());
+}
+
+void showScrollingMessage(String msg) {
+  if (!displayOK) return;
+
+  scrollingMsg = msg;
+  scrollX = SCREEN_WIDTH; // reinicia o letreiro
+  Serial.println("[DISPLAY] Nova mensagem: " + msg);
+}
+
+void drawScrollingMessage() {
+  if (!displayOK || scrollingMsg == "") return;
+
+  if (millis() - scrollTimer > 50) {  // velocidade do scroll
+    scrollTimer = millis();
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(scrollX, 28);
+    display.print(scrollingMsg);
+    display.display();
+
+    scrollX--;
+    if (scrollX < -((int)scrollingMsg.length() * 6)) {
+      scrollX = SCREEN_WIDTH;  // reinicia o letreiro
+    }
+  }
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -94,7 +125,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (freq >= 50 && freq <= 5000) {
       tone(BUZZER_PIN, freq, 500);
       mqtt.publish(TOPIC_BUZZER_STATUS, ("Tocando " + String(freq) + "Hz").c_str());
-      
+
       if (displayOK) {
         display.clearDisplay();
         display.setTextSize(2);
@@ -107,6 +138,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       mqtt.publish(TOPIC_BUZZER_STATUS, "Frequencia invalida!");
     }
   }
+
+  else if (String(topic) == TOPIC_DISPLAY_MSG) {
+    showScrollingMessage(msg);
+  }
 }
 
 void ensureMqtt() {
@@ -115,7 +150,8 @@ void ensureMqtt() {
     if (mqtt.connect(clientId.c_str())) {
       Serial.println(" conectado!");
       mqtt.subscribe(TOPIC_BUZZER_CONTROL);
-      
+      mqtt.subscribe(TOPIC_DISPLAY_MSG); // Novo tópico
+
       if (displayOK) {
         display.clearDisplay();
         display.setTextSize(1);
@@ -152,71 +188,64 @@ void checkButtons() {
   }
 }
 
-void checkTouch() {
-  int touchPins[6] = {TOUCH1_PIN, TOUCH2_PIN, TOUCH3_PIN, TOUCH4_PIN, TOUCH5_PIN, TOUCH6_PIN};
-  for (int i = 0; i < 6; i++) {
-    int val = touchRead(touchPins[i]);
-    bool pressed = (val < TOUCH_THRESHOLD);
-    if (pressed && !lastTouch[i]) {
-      String topic = String(TOPIC_TOUCH) + "/TOUCH_" + String(i + 1);
-      mqtt.publish(topic.c_str(), "ATIVADO");
-      Serial.println("[TOUCH] " + topic + " -> " + String(val));
-      tone(BUZZER_PIN, 1000 + (i * 50), 80);
-    }
-    lastTouch[i] = pressed;
+void readAndPublishSensors() {
+  // Lê temperatura e umidade do DHT11
+  float temp = dht.readTemperature();
+  float humid = dht.readHumidity();
+  
+  // Lê luminosidade do LDR (0-4095 no ESP32)
+  int ldrValue = analogRead(LDR_PIN);
+  float luminosidade = map(ldrValue, 0, 4095, 0, 100); // Converte para porcentagem
+  
+  // Verifica se as leituras do DHT são válidas
+  if (isnan(temp) || isnan(humid)) {
+    Serial.println("[SENSOR] Erro ao ler DHT11!");
+    mqtt.publish(TOPIC_TEMPERATURA, "ERRO");
+    mqtt.publish(TOPIC_UMIDADE, "ERRO");
+  } else {
+    // Publica temperatura
+    String tempStr = String(temp, 1) + "C";
+    mqtt.publish(TOPIC_TEMPERATURA, tempStr.c_str());
+    Serial.println("[SENSOR] Temperatura: " + tempStr);
+    
+    // Publica umidade
+    String humidStr = String(humid, 1) + "%";
+    mqtt.publish(TOPIC_UMIDADE, humidStr.c_str());
+    Serial.println("[SENSOR] Umidade: " + humidStr);
   }
+  
+  // Publica luminosidade
+  String lumStr = String(luminosidade, 0) + "%";
+  mqtt.publish(TOPIC_LUMINOSIDADE, lumStr.c_str());
+  Serial.println("[SENSOR] Luminosidade: " + lumStr);
 }
 
 void updateDisplay() {
-  if (!displayOK) return;
+  if (!displayOK || scrollingMsg != "") return;  // não atualiza se o letreiro estiver ativo
   
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   
-  // Linha 1: Título
   display.setCursor(0, 0);
   display.println("=== FRANZININHO ===");
   
-  // Linha 2: Status WiFi
   display.setCursor(0, 12);
   display.print("WiFi: ");
-  if (WiFi.status() == WL_CONNECTED) {
-    display.println("OK");
-  } else {
-    display.println("OFF");
-  }
+  display.println(WiFi.status() == WL_CONNECTED ? "OK" : "OFF");
   
-  // Linha 3: Status MQTT
   display.setCursor(0, 22);
   display.print("MQTT: ");
   display.println(mqtt.connected() ? "OK" : "OFF");
   
-  // Linha 4: Status LED
   display.setCursor(0, 32);
   display.print("LEDs: ");
   display.println(ledState ? "ON" : "OFF");
   
-  // Linha 5: Uptime
   display.setCursor(0, 42);
   display.print("Uptime: ");
   display.print(millis() / 1000);
   display.println("s");
-  
-  // Linha 6: Botões ativos
-  display.setCursor(0, 52);
-  display.print("BTN: ");
-  bool anyPressed = false;
-  for(int i = 0; i < 6; i++) {
-    if(lastBtn[i] == LOW) {
-      display.print(i+1);
-      display.print(" ");
-      anyPressed = true;
-    }
-  }
-  if (!anyPressed) {
-    display.print("---");
-  }
   
   display.display();
 }
@@ -224,11 +253,10 @@ void updateDisplay() {
 void initDisplay() {
   Serial.println("\n[DISPLAY] Inicializando...");
   
-  // Tenta primeiro com os pinos 8 e 9
   Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
   delay(100);
   
-  if(display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
+  if (display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
     Serial.printf("[DISPLAY] OK! (SDA=%d, SCL=%d)\n", OLED_SDA_PIN, OLED_SCL_PIN);
     displayOK = true;
     
@@ -243,37 +271,8 @@ void initDisplay() {
     display.display();
     return;
   }
-  
-  // Se não funcionar, tenta com pinos 41 e 42
-  Serial.println("[DISPLAY] Tentando pinos alternativos...");
-  Wire.begin(41, 42);
-  delay(100);
-  
-  if(display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
-    Serial.println("[DISPLAY] OK! (SDA=41, SCL=42)");
-    displayOK = true;
-    
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println("Franzininho WiFi");
-    display.println("LAB - IoT");
-    display.println("");
-    display.println("Inicializando...");
-    display.display();
-    return;
-  }
-  
-  // Se ainda não funcionar, escaneia I2C
-  Serial.println("[DISPLAY] ERRO! Escaneando I2C...");
-  Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
-  for(byte addr = 1; addr < 127; addr++) {
-    Wire.beginTransmission(addr);
-    if(Wire.endTransmission() == 0) {
-      Serial.printf("  -> Dispositivo encontrado em 0x%02X\n", addr);
-    }
-  }
+
+  Serial.println("[DISPLAY] ERRO! OLED nao encontrado!");
   displayOK = false;
 }
 
@@ -282,10 +281,9 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n\n=== Franzininho WiFi LAB - MQTT Controle ===");
-  Serial.println("Autor: IkkiKuuro");
+  Serial.println("Autor: IkkiKuuro + Cauã");
   Serial.println("Data: 2025-10-16");
 
-  // Configura pinos
   pinMode(LED_R_PIN, OUTPUT);
   pinMode(LED_G_PIN, OUTPUT);
   pinMode(LED_B_PIN, OUTPUT);
@@ -298,11 +296,11 @@ void setup() {
   pinMode(BTN5_PIN, INPUT_PULLUP);
   pinMode(BTN6_PIN, INPUT_PULLUP);
 
-  // Inicializa display
+  pinMode(LDR_PIN, INPUT);  // Configura pino do LDR como entrada
+
   initDisplay();
   delay(2000);
 
-  // Conecta WiFi
   if (displayOK) {
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -312,77 +310,42 @@ void setup() {
   
   connectWiFi();
   
-  if (displayOK) {
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.println("WiFi: OK");
-    display.println("");
-    display.print("IP: ");
-    display.println(WiFi.localIP());
-    display.display();
-    delay(2000);
-  }
-
-  // Configura MQTT
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   
-  if (displayOK) {
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.println("Conectando MQTT...");
-    display.display();
-  }
-  
   ensureMqtt();
-  
-  if (displayOK) {
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.println("Sistema Online!");
-    display.println("");
-    display.println("Pronto para uso");
-    display.display();
-    delay(2000);
-  }
 
-  // Inicializa DHT
   dht.begin();
   
   Serial.println("\n[SETUP] Concluído!");
-  Serial.println("=============================\n");
 }
 
 // ====== LOOP ======
 void loop() {
-  // Verifica conexões
-  if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
-  }
-  
-  if (!mqtt.connected()) {
-    ensureMqtt();
-  }
-  
+  if (WiFi.status() != WL_CONNECTED) connectWiFi();
+  if (!mqtt.connected()) ensureMqtt();
   mqtt.loop();
 
   unsigned long now = millis();
   
-  // Toggle LEDs a cada 3 segundos
   if (now - lastLedToggle > 3000) {
     lastLedToggle = now;
     toggleLEDs();
   }
 
-  // Atualiza display a cada 1 segundo
   if (now - lastDisplayUpdate > 1000) {
     lastDisplayUpdate = now;
     updateDisplay();
   }
 
-  // Verifica botões e touch
-  checkButtons();
-  checkTouch();
+  // Atualiza sensores a cada 30 segundos
+  if (now - lastSensorUpdate > 30000) {
+    lastSensorUpdate = now;
+    readAndPublishSensors();
+  }
 
-  delay(30);
+  drawScrollingMessage(); // Atualiza o letreiro
+  checkButtons();
+
+  delay(20);
 }
