@@ -9,9 +9,15 @@
 const char* WIFI_SSID = "IFCE";
 const char* WIFI_PASS = "IFCE1234";
 
-//========Comando Buzzer============
-//IFCE_Iran/buzzer_control
-//IFCE_Iran/display_msg
+//========Comandos MQTT============
+//IFCE_Iran/buzzer_control <frequencia>
+//IFCE_Iran/display_msg <mensagem>
+//IFCE_Iran/led_control RED/GREEN/BLUE/ALL ON/OFF/TOGGLE
+//Exemplos: 
+//  IFCE_Iran/led_control RED ON
+//  IFCE_Iran/led_control GREEN OFF
+//  IFCE_Iran/led_control BLUE TOGGLE
+//  IFCE_Iran/led_control ALL ON
 
 
 
@@ -29,6 +35,7 @@ DHT dht(DHTPIN, DHTTYPE);
 const char* TOPIC_BTN = "IFCE_Iran/botoes";
 const char* TOPIC_BUZZER_CONTROL = "IFCE_Iran/buzzer_control";
 const char* TOPIC_BUZZER_STATUS = "IFCE_Iran/buzzer_status";
+const char* TOPIC_LED_CONTROL = "IFCE_Iran/led_control";
 const char* TOPIC_LED_STATUS = "IFCE_Iran/led_status";
 const char* TOPIC_DISPLAY_MSG = "IFCE_Iran/display_msg";
 const char* TOPIC_TEMPERATURA = "IFCE_Iran/temperatura";
@@ -64,8 +71,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ====== VARIÁVEIS ======
 bool lastBtn[6] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};
-bool ledState = false;
-unsigned long lastLedToggle = 0;
+bool ledRedState = false;
+bool ledGreenState = false;
+bool ledBlueState = false;
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastSensorUpdate = 0;
 bool displayOK = false;
@@ -113,6 +121,42 @@ void drawScrollingMessage() {
   }
 }
 
+void controlLED(String color, String action) {
+  color.toUpperCase();
+  action.toUpperCase();
+  
+  if (color == "RED" || color == "VERMELHO" || color == "ALL") {
+    if (action == "ON") ledRedState = true;
+    else if (action == "OFF") ledRedState = false;
+    else if (action == "TOGGLE") ledRedState = !ledRedState;
+    digitalWrite(LED_R_PIN, ledRedState);
+  }
+  
+  if (color == "GREEN" || color == "VERDE" || color == "ALL") {
+    if (action == "ON") ledGreenState = true;
+    else if (action == "OFF") ledGreenState = false;
+    else if (action == "TOGGLE") ledGreenState = !ledGreenState;
+    digitalWrite(LED_G_PIN, ledGreenState);
+  }
+  
+  if (color == "BLUE" || color == "AZUL" || color == "ALL") {
+    if (action == "ON") ledBlueState = true;
+    else if (action == "OFF") ledBlueState = false;
+    else if (action == "TOGGLE") ledBlueState = !ledBlueState;
+    digitalWrite(LED_B_PIN, ledBlueState);
+  }
+  
+  // Publica status atualizado
+  String status = "R:";
+  status += ledRedState ? "ON" : "OFF";
+  status += " G:";
+  status += ledGreenState ? "ON" : "OFF";
+  status += " B:";
+  status += ledBlueState ? "ON" : "OFF";
+  mqtt.publish(TOPIC_LED_STATUS, status.c_str());
+  Serial.println("[LED] " + status);
+}
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String msg;
   for (int i = 0; i < length; i++) msg += (char)payload[i];
@@ -139,6 +183,18 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     }
   }
 
+  else if (String(topic) == TOPIC_LED_CONTROL) {
+    // Formato esperado: "RED ON" ou "GREEN OFF" ou "BLUE TOGGLE" ou "ALL ON"
+    int spaceIndex = msg.indexOf(' ');
+    if (spaceIndex > 0) {
+      String color = msg.substring(0, spaceIndex);
+      String action = msg.substring(spaceIndex + 1);
+      controlLED(color, action);
+    } else {
+      mqtt.publish(TOPIC_LED_STATUS, "Formato invalido! Use: COR ACAO");
+    }
+  }
+
   else if (String(topic) == TOPIC_DISPLAY_MSG) {
     showScrollingMessage(msg);
   }
@@ -150,7 +206,8 @@ void ensureMqtt() {
     if (mqtt.connect(clientId.c_str())) {
       Serial.println(" conectado!");
       mqtt.subscribe(TOPIC_BUZZER_CONTROL);
-      mqtt.subscribe(TOPIC_DISPLAY_MSG); // Novo tópico
+      mqtt.subscribe(TOPIC_LED_CONTROL);
+      mqtt.subscribe(TOPIC_DISPLAY_MSG);
 
       if (displayOK) {
         display.clearDisplay();
@@ -166,13 +223,7 @@ void ensureMqtt() {
   }
 }
 
-void toggleLEDs() {
-  ledState = !ledState;
-  digitalWrite(LED_R_PIN, ledState);
-  digitalWrite(LED_G_PIN, ledState);
-  digitalWrite(LED_B_PIN, ledState);
-  mqtt.publish(TOPIC_LED_STATUS, ledState ? "LIGADOS" : "DESLIGADOS");
-}
+
 
 void checkButtons() {
   int btnPins[6] = {BTN1_PIN, BTN2_PIN, BTN3_PIN, BTN4_PIN, BTN5_PIN, BTN6_PIN};
@@ -195,7 +246,8 @@ void readAndPublishSensors() {
   
   // Lê luminosidade do LDR (0-4095 no ESP32)
   int ldrValue = analogRead(LDR_PIN);
-  float luminosidade = map(ldrValue, 0, 4095, 0, 100); // Converte para porcentagem
+  int luminosidade = map(ldrValue, 0, 4095, 0, 100); // Converte para porcentagem (0-100%)
+  luminosidade = constrain(luminosidade, 0, 100); // Garante que fica entre 0 e 100
   
   // Verifica se as leituras do DHT são válidas
   if (isnan(temp) || isnan(humid)) {
@@ -215,9 +267,9 @@ void readAndPublishSensors() {
   }
   
   // Publica luminosidade
-  String lumStr = String(luminosidade, 0) + "%";
+  String lumStr = String(luminosidade) + "%";
   mqtt.publish(TOPIC_LUMINOSIDADE, lumStr.c_str());
-  Serial.println("[SENSOR] Luminosidade: " + lumStr);
+  Serial.println("[SENSOR] Luminosidade: " + lumStr + " (LDR: " + String(ldrValue) + ")");
 }
 
 void updateDisplay() {
@@ -239,8 +291,12 @@ void updateDisplay() {
   display.println(mqtt.connected() ? "OK" : "OFF");
   
   display.setCursor(0, 32);
-  display.print("LEDs: ");
-  display.println(ledState ? "ON" : "OFF");
+  display.print("LEDs: R:");
+  display.print(ledRedState ? "1" : "0");
+  display.print(" G:");
+  display.print(ledGreenState ? "1" : "0");
+  display.print(" B:");
+  display.println(ledBlueState ? "1" : "0");
   
   display.setCursor(0, 42);
   display.print("Uptime: ");
@@ -327,11 +383,6 @@ void loop() {
   mqtt.loop();
 
   unsigned long now = millis();
-  
-  if (now - lastLedToggle > 3000) {
-    lastLedToggle = now;
-    toggleLEDs();
-  }
 
   if (now - lastDisplayUpdate > 1000) {
     lastDisplayUpdate = now;
