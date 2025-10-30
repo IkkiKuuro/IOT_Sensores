@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Franzininho IoT</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .connection-status {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .status-connected {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .status-disconnected {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-icon {
+            font-size: 1.5em;
+        }
+
+        .sensor-value {
+            font-size: 3em;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .sensor-label {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .last-update {
+            text-align: center;
+            color: #999;
+            font-size: 0.8em;
+            margin-top: 10px;
+        }
+
+        .controls {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .control-section {
+            margin-bottom: 25px;
+        }
+
+        .control-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 100px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-red {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .btn-red:hover {
+            background-color: #d32f2f;
+        }
+
+        .btn-green {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .btn-green:hover {
+            background-color: #388E3C;
+        }
+
+        .btn-blue {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        .btn-blue:hover {
+            background-color: #1976D2;
+        }
+
+        .btn-purple {
+            background-color: #9C27B0;
+            color: white;
+        }
+
+        .btn-purple:hover {
+            background-color: #7B1FA2;
+        }
+
+        .btn-orange {
+            background-color: #FF9800;
+            color: white;
+        }
+
+        .btn-orange:hover {
+            background-color: #F57C00;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        input[type="text"], input[type="number"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .led-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-left: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+
+        .led-on {
+            background-color: #4CAF50;
+            box-shadow: 0 0 15px #4CAF50;
+        }
+
+        .led-off {
+            background-color: #ccc;
+        }
+
+        .message-display {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            min-height: 50px;
+            color: #333;
+            font-style: italic;
+        }
+
+        .history {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .history-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .timestamp {
+            color: #999;
+            font-size: 0.85em;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Dashboard Franzininho IoT</h1>
+            <div class="connection-status" id="connectionStatus">
+                ⚠️ Desconectado
+            </div>
+        </div>
+
+        <!-- Sensores -->
+        <div class="dashboard">
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">🌡️</span>
+                    Temperatura
+                </div>
+                <div class="sensor-value" id="temperatura">--</div>
+                <div class="sensor-label">Graus Celsius</div>
+                <div class="last-update" id="tempUpdate">Aguardando dados...</div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">💧</span>
+                    Umidade
+                </div>
+                <div class="sensor-value" id="umidade">--</div>
+                <div class="sensor-label">Percentual</div>
+                <div class="last-update" id="humidUpdate">Aguardando dados...</div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">☀️</span>
+                    Luminosidade
+                </div>
+                <div class="sensor-value" id="luminosidade">--</div>
+                <div class="sensor-label">Percentual</div>
+                <div class="last-update" id="lumUpdate">Aguardando dados...</div>
+            </div>
+        </div>
+
+        <!-- Controles -->
+        <div class="controls">
+            <div class="control-section">
+                <div class="control-title">💡 Controle de LEDs</div>
+                <div style="margin-bottom: 15px;">
+                    <strong>Status:</strong>
+                    Vermelho <span class="led-indicator" id="ledRed"></span>
+                    Verde <span class="led-indicator" id="ledGreen"></span>
+                    Azul <span class="led-indicator" id="ledBlue"></span>
+                </div>
+                <div class="button-group">
+                    <button class="btn-red" onclick="controlLED('RED', 'ON')">🔴 Vermelho ON</button>
+                    <button class="btn-red" onclick="controlLED('RED', 'OFF')">⚫ Vermelho OFF</button>
+                </div>
+                <div class="button-group" style="margin-top: 10px;">
+                    <button class="btn-green" onclick="controlLED('GREEN', 'ON')">🟢 Verde ON</button>
+                    <button class="btn-green" onclick="controlLED('GREEN', 'OFF')">⚫ Verde OFF</button>
+                </div>
+                <div class="button-group" style="margin-top: 10px;">
+                    <button class="btn-blue" onclick="controlLED('BLUE', 'ON')">🔵 Azul ON</button>
+                    <button class="btn-blue" onclick="controlLED('BLUE', 'OFF')">⚫ Azul OFF</button>
+                </div>
+                <div class="button-group" style="margin-top: 10px;">
+                    <button class="btn-purple" onclick="controlLED('ALL', 'ON')">💡 Todos ON</button>
+                    <button class="btn-purple" onclick="controlLED('ALL', 'OFF')">⚫ Todos OFF</button>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="control-title">🔊 Controle do Buzzer</div>
+                <div class="input-group">
+                    <input type="number" id="buzzerFreq" placeholder="Frequência (50-5000 Hz)" min="50" max="5000" value="1000">
+                    <button class="btn-orange" onclick="controlBuzzer()">▶️ Tocar</button>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="control-title">📱 Mensagem no Display</div>
+                <div class="input-group">
+                    <input type="text" id="displayMsg" placeholder="Digite a mensagem...">
+                    <button class="btn-blue" onclick="sendDisplayMessage()">📤 Enviar</button>
+                </div>
+                <div class="message-display" id="currentMessage">Nenhuma mensagem enviada</div>
+            </div>
+        </div>
+
+        <!-- Histórico de Eventos -->
+        <div class="history">
+            <div class="control-title">📊 Histórico de Eventos</div>
+            <div id="historyList">
+                <div class="history-item">
+                    <span>Aguardando eventos...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuração MQTT
+        const MQTT_HOST = 'broker.hivemq.com';
+        const MQTT_PORT = 8000;
+        const MQTT_PATH = '/mqtt';
+        
+        const TOPICS = {
+            temperatura: 'IFCE_Iran/temperatura',
+            umidade: 'IFCE_Iran/umidade',
+            luminosidade: 'IFCE_Iran/luminosidade',
+            ledControl: 'IFCE_Iran/led_control',
+            ledStatus: 'IFCE_Iran/led_status',
+            buzzerControl: 'IFCE_Iran/buzzer_control',
+            buzzerStatus: 'IFCE_Iran/buzzer_status',
+            displayMsg: 'IFCE_Iran/display_msg',
+            botoes: 'IFCE_Iran/botoes/#'
+        };
+
+        let client;
+        let historyItems = [];
+
+        // Conectar ao broker MQTT
+        function connectMQTT() {
+            const clientId = 'dashboard_' + Math.random().toString(16).substr(2, 8);
+            
+            client = mqtt.connect(`ws://${MQTT_HOST}:${MQTT_PORT}${MQTT_PATH}`, {
+                clientId: clientId,
+                clean: true,
+                reconnectPeriod: 1000
+            });
+
+            client.on('connect', function () {
+                console.log('Conectado ao broker MQTT');
+                updateConnectionStatus(true);
+                
+                // Inscrever em todos os tópicos
+                Object.values(TOPICS).forEach(topic => {
+                    client.subscribe(topic, function (err) {
+                        if (!err) {
+                            console.log('Inscrito em:', topic);
+                        }
+                    });
+                });
+
+                addHistoryItem('✅ Conectado ao broker MQTT');
+            });
+
+            client.on('message', function (topic, message) {
+                const msg = message.toString();
+                handleMessage(topic, msg);
+            });
+
+            client.on('error', function (error) {
+                console.error('Erro MQTT:', error);
+                updateConnectionStatus(false);
+            });
+
+            client.on('close', function () {
+                console.log('Desconectado do broker MQTT');
+                updateConnectionStatus(false);
+            });
+        }
+
+        function handleMessage(topic, message) {
+            console.log('Mensagem recebida:', topic, message);
+
+            if (topic === TOPICS.temperatura) {
+                document.getElementById('temperatura').textContent = message;
+                document.getElementById('tempUpdate').textContent = 'Atualizado: ' + new Date().toLocaleTimeString();
+                addHistoryItem(`🌡️ Temperatura: ${message}`);
+            }
+            else if (topic === TOPICS.umidade) {
+                document.getElementById('umidade').textContent = message;
+                document.getElementById('humidUpdate').textContent = 'Atualizado: ' + new Date().toLocaleTimeString();
+                addHistoryItem(`💧 Umidade: ${message}`);
+            }
+            else if (topic === TOPICS.luminosidade) {
+                document.getElementById('luminosidade').textContent = message;
+                document.getElementById('lumUpdate').textContent = 'Atualizado: ' + new Date().toLocaleTimeString();
+                addHistoryItem(`☀️ Luminosidade: ${message}`);
+            }
+            else if (topic === TOPICS.ledStatus) {
+                updateLEDStatus(message);
+                addHistoryItem(`💡 Status LED: ${message}`);
+            }
+            else if (topic === TOPICS.buzzerStatus) {
+                addHistoryItem(`🔊 Buzzer: ${message}`);
+            }
+            else if (topic.startsWith('IFCE_Iran/botoes/')) {
+                const botao = topic.split('/').pop();
+                addHistoryItem(`🔘 ${botao}: ${message}`);
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.textContent = '✅ Conectado';
+                statusEl.className = 'connection-status status-connected';
+            } else {
+                statusEl.textContent = '❌ Desconectado';
+                statusEl.className = 'connection-status status-disconnected';
+            }
+        }
+
+        function updateLEDStatus(status) {
+            // Formato: "R:ON G:OFF B:ON"
+            const redMatch = status.match(/R:(ON|OFF)/);
+            const greenMatch = status.match(/G:(ON|OFF)/);
+            const blueMatch = status.match(/B:(ON|OFF)/);
+
+            if (redMatch) {
+                const redLed = document.getElementById('ledRed');
+                redLed.className = redMatch[1] === 'ON' ? 'led-indicator led-on' : 'led-indicator led-off';
+                redLed.style.backgroundColor = redMatch[1] === 'ON' ? '#f44336' : '#ccc';
+            }
+
+            if (greenMatch) {
+                const greenLed = document.getElementById('ledGreen');
+                greenLed.className = greenMatch[1] === 'ON' ? 'led-indicator led-on' : 'led-indicator led-off';
+                greenLed.style.backgroundColor = greenMatch[1] === 'ON' ? '#4CAF50' : '#ccc';
+            }
+
+            if (blueMatch) {
+                const blueLed = document.getElementById('ledBlue');
+                blueLed.className = blueMatch[1] === 'ON' ? 'led-indicator led-on' : 'led-indicator led-off';
+                blueLed.style.backgroundColor = blueMatch[1] === 'ON' ? '#2196F3' : '#ccc';
+            }
+        }
+
+        function controlLED(color, action) {
+            if (client && client.connected) {
+                const message = `${color} ${action}`;
+                client.publish(TOPICS.ledControl, message);
+                console.log('Enviado:', message);
+            } else {
+                alert('Não conectado ao broker MQTT!');
+            }
+        }
+
+        function controlBuzzer() {
+            const freq = document.getElementById('buzzerFreq').value;
+            if (freq >= 50 && freq <= 5000) {
+                if (client && client.connected) {
+                    client.publish(TOPICS.buzzerControl, freq.toString());
+                    console.log('Buzzer:', freq);
+                } else {
+                    alert('Não conectado ao broker MQTT!');
+                }
+            } else {
+                alert('Frequência deve estar entre 50 e 5000 Hz!');
+            }
+        }
+
+        function sendDisplayMessage() {
+            const msg = document.getElementById('displayMsg').value;
+            if (msg.trim()) {
+                if (client && client.connected) {
+                    client.publish(TOPICS.displayMsg, msg);
+                    document.getElementById('currentMessage').textContent = msg;
+                    document.getElementById('displayMsg').value = '';
+                    console.log('Mensagem enviada:', msg);
+                } else {
+                    alert('Não conectado ao broker MQTT!');
+                }
+            } else {
+                alert('Digite uma mensagem!');
+            }
+        }
+
+        function addHistoryItem(text) {
+            const timestamp = new Date().toLocaleTimeString();
+            historyItems.unshift({ text, timestamp });
+            
+            // Manter apenas os últimos 20 itens
+            if (historyItems.length > 20) {
+                historyItems.pop();
+            }
+
+            updateHistoryDisplay();
+        }
+
+        function updateHistoryDisplay() {
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = historyItems.map(item => `
+                <div class="history-item">
+                    <span>${item.text}</span>
+                    <span class="timestamp">${item.timestamp}</span>
+                </div>
+            `).join('');
+        }
+
+        // Inicializar ao carregar a página
+        window.addEventListener('load', function() {
+            connectMQTT();
+        });
+
+        // Permitir envio de mensagem com Enter
+        document.getElementById('displayMsg').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendDisplayMessage();
+            }
+        });
+
+        document.getElementById('buzzerFreq').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                controlBuzzer();
+            }
+        });
+    </script>
+</body>
+</html>
