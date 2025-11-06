@@ -65,18 +65,15 @@ PubSubClient mqtt(espClient);
 #define BTN5_PIN 6
 #define BTN6_PIN 7
 
-#define LDR_PIN 1  // Pino analógico para sensor de luminosidade (LDR)
+#define LDR_PIN 1
 
 // ====== PWM para LEDs RGB ======
-#define LED_R_CHANNEL 0
-#define LED_G_CHANNEL 1
-#define LED_B_CHANNEL 2
 #define PWM_FREQ 5000
-#define PWM_RESOLUTION 8  // 0-255
+#define PWM_RESOLUTION 8
 
 // ====== DISPLAY OLED ======
-#define OLED_SDA_PIN 8  // Se não funcionar, teste com 41
-#define OLED_SCL_PIN 9  // Se não funcionar, teste com 42
+#define OLED_SDA_PIN 8
+#define OLED_SCL_PIN 9
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
@@ -93,11 +90,11 @@ bool ledBlueState = false;
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastSensorUpdate = 0;
 bool displayOK = false;
-String scrollingMsg = ""; // mensagem atual
+String scrollingMsg = "";
 unsigned long scrollTimer = 0;
 int scrollX = SCREEN_WIDTH;
 
-#define HOLD_TIME_MS 1000  // Tempo para considerar botão segurado (1 segundo)
+#define HOLD_TIME_MS 1000
 
 // ====== FUNÇÕES ======
 
@@ -113,16 +110,16 @@ void connectWiFi() {
 
 void showScrollingMessage(String msg) {
   if (!displayOK) return;
-
+  
   scrollingMsg = msg;
-  scrollX = SCREEN_WIDTH; // reinicia o letreiro
+  scrollX = SCREEN_WIDTH;
   Serial.println("[DISPLAY] Nova mensagem: " + msg);
 }
 
 void clearDisplay() {
   if (!displayOK) return;
   
-  scrollingMsg = ""; // Limpa mensagem do letreiro
+  scrollingMsg = "";
   display.clearDisplay();
   display.display();
   Serial.println("[DISPLAY] Display limpo!");
@@ -131,7 +128,7 @@ void clearDisplay() {
 void drawScrollingMessage() {
   if (!displayOK || scrollingMsg == "") return;
 
-  if (millis() - scrollTimer > 50) {  // velocidade do scroll
+  if (millis() - scrollTimer > 50) {
     scrollTimer = millis();
 
     display.clearDisplay();
@@ -143,7 +140,7 @@ void drawScrollingMessage() {
 
     scrollX--;
     if (scrollX < -((int)scrollingMsg.length() * 6)) {
-      scrollX = SCREEN_WIDTH;  // reinicia o letreiro
+      scrollX = SCREEN_WIDTH;
     }
   }
 }
@@ -209,37 +206,30 @@ void controlLED(String color, String action) {
 }
 
 void setRGBColor(String hexColor) {
-  // Remove # se existir
   if (hexColor.startsWith("#")) {
     hexColor = hexColor.substring(1);
   }
   
-  // Valida formato
   if (hexColor.length() != 6) {
     mqtt.publish(TOPIC_LED_STATUS, "Formato invalido! Use #RRGGBB");
     return;
   }
   
-  // Converte para maiúsculas
   hexColor.toUpperCase();
   
-  // Converte hex para RGB
   long number = strtol(hexColor.c_str(), NULL, 16);
   int r = (number >> 16) & 0xFF;
   int g = (number >> 8) & 0xFF;
   int b = number & 0xFF;
   
-  // Define PWM para cada canal
   ledcWrite(LED_R_PIN, r);
   ledcWrite(LED_G_PIN, g);
   ledcWrite(LED_B_PIN, b);
   
-  // Atualiza estados
   ledRedState = (r > 0);
   ledGreenState = (g > 0);
   ledBlueState = (b > 0);
   
-  // Publica status
   String status = "RGB: #" + hexColor + " (R:" + String(r) + " G:" + String(g) + " B:" + String(b) + ")";
   mqtt.publish(TOPIC_LED_STATUS, status.c_str());
   Serial.println("[LED] " + status);
@@ -272,7 +262,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 
   else if (String(topic) == TOPIC_LED_CONTROL) {
-    // Formato esperado: "RED ON" ou "GREEN OFF" ou "BLUE TOGGLE" ou "ALL ON"
     int spaceIndex = msg.indexOf(' ');
     if (spaceIndex > 0) {
       String color = msg.substring(0, spaceIndex);
@@ -335,7 +324,6 @@ void checkButtons() {
     bool current = digitalRead(btnPins[i]);
     String topic = String(TOPIC_BTN) + "/BOTAO_" + String(i + 1);
     
-    // Detecta pressão inicial (LOW = pressionado com INPUT_PULLUP)
     if (lastBtn[i] == HIGH && current == LOW) {
       btnPressTime[i] = now;
       btnHoldReported[i] = false;
@@ -344,7 +332,6 @@ void checkButtons() {
       tone(BUZZER_PIN, 700 + (i * 50), 100);
     }
     
-    // Botão está sendo segurado (LOW = pressionado)
     else if (current == LOW && !btnHoldReported[i]) {
       unsigned long holdDuration = now - btnPressTime[i];
       if (holdDuration >= HOLD_TIME_MS) {
@@ -355,7 +342,6 @@ void checkButtons() {
       }
     }
     
-    // Botão foi solto (HIGH = solto)
     else if (lastBtn[i] == LOW && current == HIGH) {
       unsigned long holdDuration = now - btnPressTime[i];
       if (holdDuration >= HOLD_TIME_MS) {
@@ -373,40 +359,34 @@ void checkButtons() {
 }
 
 void readAndPublishSensors() {
-  // Lê temperatura e umidade do DHT11
   float temp = dht.readTemperature();
   float humid = dht.readHumidity();
   
-  // Lê luminosidade do LDR (0-4095 no ESP32)
   int ldrValue = analogRead(LDR_PIN);
-  int luminosidade = map(ldrValue, 0, 4095, 0, 100); // Converte para porcentagem (0-100%)
-  luminosidade = constrain(luminosidade, 0, 100); // Garante que fica entre 0 e 100
+  int luminosidade = map(ldrValue, 0, 4095, 0, 100);
+  luminosidade = constrain(luminosidade, 0, 100);
   
-  // Verifica se as leituras do DHT são válidas
   if (isnan(temp) || isnan(humid)) {
     Serial.println("[SENSOR] Erro ao ler DHT11!");
     mqtt.publish(TOPIC_TEMPERATURA, "ERRO");
     mqtt.publish(TOPIC_UMIDADE, "ERRO");
   } else {
-    // Publica temperatura
     String tempStr = String(temp, 1) + "C";
     mqtt.publish(TOPIC_TEMPERATURA, tempStr.c_str());
     Serial.println("[SENSOR] Temperatura: " + tempStr);
     
-    // Publica umidade
     String humidStr = String(humid, 1) + "%";
     mqtt.publish(TOPIC_UMIDADE, humidStr.c_str());
     Serial.println("[SENSOR] Umidade: " + humidStr);
   }
   
-  // Publica luminosidade
   String lumStr = String(luminosidade) + "%";
   mqtt.publish(TOPIC_LUMINOSIDADE, lumStr.c_str());
   Serial.println("[SENSOR] Luminosidade: " + lumStr + " (LDR: " + String(ldrValue) + ")");
 }
 
 void updateDisplay() {
-  if (!displayOK || scrollingMsg != "") return;  // não atualiza se o letreiro estiver ativo
+  if (!displayOK || scrollingMsg != "") return;
   
   display.clearDisplay();
   display.setTextSize(1);
@@ -478,12 +458,10 @@ void setup() {
   pinMode(LED_B_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
 
-  // Configura PWM para LEDs RGB (compatível com ESP32 v3.x)
   ledcAttach(LED_R_PIN, PWM_FREQ, PWM_RESOLUTION);
   ledcAttach(LED_G_PIN, PWM_FREQ, PWM_RESOLUTION);
   ledcAttach(LED_B_PIN, PWM_FREQ, PWM_RESOLUTION);
   
-  // Inicia LEDs desligados
   ledcWrite(LED_R_PIN, 0);
   ledcWrite(LED_G_PIN, 0);
   ledcWrite(LED_B_PIN, 0);
@@ -495,7 +473,7 @@ void setup() {
   pinMode(BTN5_PIN, INPUT_PULLUP);
   pinMode(BTN6_PIN, INPUT_PULLUP);
 
-  pinMode(LDR_PIN, INPUT);  // Configura pino do LDR como entrada
+  pinMode(LDR_PIN, INPUT);
 
   initDisplay();
   delay(2000);
@@ -516,6 +494,11 @@ void setup() {
 
   dht.begin();
   
+  for (int i = 0; i < 6; i++) {
+    int btnPins[6] = {BTN1_PIN, BTN2_PIN, BTN3_PIN, BTN4_PIN, BTN5_PIN, BTN6_PIN};
+    lastBtn[i] = digitalRead(btnPins[i]);
+  }
+  
   Serial.println("\n[SETUP] Concluído!");
 }
 
@@ -532,13 +515,12 @@ void loop() {
     updateDisplay();
   }
 
-  // Atualiza sensores a cada 30 segundos
   if (now - lastSensorUpdate > 30000) {
     lastSensorUpdate = now;
     readAndPublishSensors();
   }
 
-  drawScrollingMessage(); // Atualiza o letreiro
+  drawScrollingMessage();
   checkButtons();
 
   delay(20);
