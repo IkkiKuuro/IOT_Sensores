@@ -276,6 +276,47 @@
             font-size: 0.85em;
         }
 
+        .button-status {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .button-status.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transform: scale(1.05);
+            border-color: #fff;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .button-status.active .button-number,
+        .button-status.active .button-state,
+        .button-status.active .button-count {
+            color: white;
+        }
+
+        .button-number {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .button-state {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .button-count {
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 8px;
+        }
+
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -326,6 +367,43 @@
                 <div class="sensor-value" id="luminosidade">--</div>
                 <div class="sensor-label">Percentual</div>
                 <div class="last-update" id="lumUpdate">Aguardando dados...</div>
+            </div>
+        </div>
+
+        <!-- Botões -->
+        <div class="controls">
+            <div class="control-title">🔘 Status dos Botões</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                <div class="button-status" id="btn1">
+                    <div class="button-number">Botão 1</div>
+                    <div class="button-state">--</div>
+                    <div class="button-count">Pressões: <span id="btn1Count">0</span></div>
+                </div>
+                <div class="button-status" id="btn2">
+                    <div class="button-number">Botão 2</div>
+                    <div class="button-state">--</div>
+                    <div class="button-count">Pressões: <span id="btn2Count">0</span></div>
+                </div>
+                <div class="button-status" id="btn3">
+                    <div class="button-number">Botão 3</div>
+                    <div class="button-state">--</div>
+                    <div class="button-count">Pressões: <span id="btn3Count">0</span></div>
+                </div>
+                <div class="button-status" id="btn4">
+                    <div class="button-number">Botão 4</div>
+                    <div class="button-state">--</div>
+                    <div class="button-count">Pressões: <span id="btn4Count">0</span></div>
+                </div>
+                <div class="button-status" id="btn5">
+                    <div class="button-number">Botão 5</div>
+                    <div class="button-state">--</div>
+                    <div class="button-count">Pressões: <span id="btn5Count">0</span></div>
+                </div>
+                <div class="button-status" id="btn6">
+                    <div class="button-number">Botão 6</div>
+                    <div class="button-state">--</div>
+                    <div class="button-count">Pressões: <span id="btn6Count">0</span></div>
+                </div>
             </div>
         </div>
 
@@ -406,6 +484,8 @@
 
         let client;
         let historyItems = [];
+        let buttonCounts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0};
+        let buttonTimeouts = {};
 
         // Conectar ao broker MQTT
         function connectMQTT() {
@@ -476,8 +556,36 @@
             }
             else if (topic.startsWith('IFCE_Iran/botoes/')) {
                 const botao = topic.split('/').pop();
+                const btnNumber = botao.replace('BOTAO_', '');
+                updateButtonStatus(btnNumber, message);
                 addHistoryItem(`🔘 ${botao}: ${message}`);
             }
+        }
+
+        function updateButtonStatus(btnNumber, message) {
+            const btnElement = document.getElementById(`btn${btnNumber}`);
+            const btnStateElement = btnElement.querySelector('.button-state');
+            const btnCountElement = document.getElementById(`btn${btnNumber}Count`);
+            
+            // Atualiza o estado
+            btnStateElement.textContent = message;
+            
+            // Incrementa contador
+            buttonCounts[btnNumber]++;
+            btnCountElement.textContent = buttonCounts[btnNumber];
+            
+            // Adiciona classe active
+            btnElement.classList.add('active');
+            
+            // Remove a classe após 500ms
+            if (buttonTimeouts[btnNumber]) {
+                clearTimeout(buttonTimeouts[btnNumber]);
+            }
+            
+            buttonTimeouts[btnNumber] = setTimeout(() => {
+                btnElement.classList.remove('active');
+                btnStateElement.textContent = 'Aguardando...';
+            }, 500);
         }
 
         function updateConnectionStatus(connected) {
