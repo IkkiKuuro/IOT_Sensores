@@ -722,6 +722,110 @@
         let currentColor = '#FF00FF';
 
         // Converte HSV para RGB
+        function hsvToRgb(h, s, v) {
+            h = h / 360;
+            s = s / 100;
+            v = v / 100;
+            
+            let r, g, b;
+            let i = Math.floor(h * 6);
+            let f = h * 6 - i;
+            let p = v * (1 - s);
+            let q = v * (1 - f * s);
+            let t = v * (1 - (1 - f) * s);
+            
+            switch (i % 6) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                case 5: r = v; g = p; b = q; break;
+            }
+            
+            return {
+                r: Math.round(r * 255),
+                g: Math.round(g * 255),
+                b: Math.round(b * 255)
+            };
+        }
+
+        // Converte RGB para HEX
+        function rgbToHex(r, g, b) {
+            return "#" + [r, g, b].map(x => {
+                const hex = x.toString(16);
+                return hex.length === 1 ? "0" + hex : hex;
+            }).join('').toUpperCase();
+        }
+
+        // Atualiza cor baseado nos sliders HSV
+        function updateFromHSV() {
+            const h = document.getElementById('hueSlider').value;
+            const s = document.getElementById('satSlider').value;
+            const v = document.getElementById('valSlider').value;
+            
+            // Atualiza labels
+            document.getElementById('hueValue').textContent = h + '°';
+            document.getElementById('satValue').textContent = s + '%';
+            document.getElementById('valValue').textContent = v + '%';
+            
+            // Converte HSV para RGB
+            const rgb = hsvToRgb(h, s, v);
+            const hexColor = rgbToHex(rgb.r, rgb.g, rgb.b);
+            
+            // Atualiza preview
+            currentColor = hexColor;
+            updateColorPreview(hexColor);
+        }
+
+        // Atualiza o preview de cor
+        function updateColorPreview(color) {
+            const preview = document.getElementById('rgbPreview');
+            const text = document.getElementById('previewText');
+            preview.style.backgroundColor = color;
+            text.textContent = color;
+            
+            // Atualiza também o color picker
+            document.getElementById('colorPicker').value = color;
+            document.getElementById('hexInput').value = color;
+        }
+
+        // Troca entre modos de seleção
+        function switchColorMode(mode) {
+            // Atualiza abas
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Mostra painel correto
+            document.querySelectorAll('.color-panel').forEach(panel => panel.classList.remove('active'));
+            
+            if (mode === 'hsv') {
+                document.getElementById('hsvPanel').classList.add('active');
+            } else if (mode === 'picker') {
+                document.getElementById('pickerPanel').classList.add('active');
+            } else if (mode === 'preset') {
+                document.getElementById('presetPanel').classList.add('active');
+            }
+        }
+
+        // Define cor pré-definida
+        function setPresetColor(color) {
+            currentColor = color.toUpperCase();
+            updateColorPreview(currentColor);
+            applyCurrentColor();
+        }
+
+        // Aplica a cor atual
+        function applyCurrentColor() {
+            if (client && client.connected) {
+                client.publish(TOPICS.ledRgb, currentColor);
+                console.log('Cor RGB definida:', currentColor);
+                addHistoryItem(`🎨 Cor RGB: ${currentColor}`);
+            } else {
+                alert('Não conectado ao broker MQTT!');
+            }
+        }
+
         function connectMQTT() {
             const clientId = 'dashboard_' + Math.random().toString(16).substr(2, 8);
             
