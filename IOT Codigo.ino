@@ -12,12 +12,14 @@ const char* WIFI_PASS = "IFCE1234";
 //========Comandos MQTT============
 //IFCE_Iran/buzzer_control <frequencia>
 //IFCE_Iran/display_msg <mensagem>
+//IFCE_Iran/display_control CLEAR (limpa o display)
 //IFCE_Iran/led_control RED/GREEN/BLUE/ALL ON/OFF/TOGGLE
 //Exemplos: 
 //  IFCE_Iran/led_control RED ON
 //  IFCE_Iran/led_control GREEN OFF
 //  IFCE_Iran/led_control BLUE TOGGLE
 //  IFCE_Iran/led_control ALL ON
+//  IFCE_Iran/display_control CLEAR
 
 
 
@@ -38,6 +40,7 @@ const char* TOPIC_BUZZER_STATUS = "IFCE_Iran/buzzer_status";
 const char* TOPIC_LED_CONTROL = "IFCE_Iran/led_control";
 const char* TOPIC_LED_STATUS = "IFCE_Iran/led_status";
 const char* TOPIC_DISPLAY_MSG = "IFCE_Iran/display_msg";
+const char* TOPIC_DISPLAY_CONTROL = "IFCE_Iran/display_control";
 const char* TOPIC_TEMPERATURA = "IFCE_Iran/temperatura";
 const char* TOPIC_UMIDADE = "IFCE_Iran/umidade";
 const char* TOPIC_LUMINOSIDADE = "IFCE_Iran/luminosidade";
@@ -71,6 +74,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ====== VARIÁVEIS ======
 bool lastBtn[6] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};
+unsigned long btnPressTime[6] = {0, 0, 0, 0, 0, 0};
+bool btnHoldReported[6] = {false, false, false, false, false, false};
 bool ledRedState = false;
 bool ledGreenState = false;
 bool ledBlueState = false;
@@ -80,6 +85,8 @@ bool displayOK = false;
 String scrollingMsg = ""; // mensagem atual
 unsigned long scrollTimer = 0;
 int scrollX = SCREEN_WIDTH;
+
+#define HOLD_TIME_MS 1000  // Tempo para considerar botão segurado (1 segundo)
 
 // ====== FUNÇÕES ======
 
@@ -99,6 +106,15 @@ void showScrollingMessage(String msg) {
   scrollingMsg = msg;
   scrollX = SCREEN_WIDTH; // reinicia o letreiro
   Serial.println("[DISPLAY] Nova mensagem: " + msg);
+}
+
+void clearDisplay() {
+  if (!displayOK) return;
+  
+  scrollingMsg = ""; // Limpa mensagem do letreiro
+  display.clearDisplay();
+  display.display();
+  Serial.println("[DISPLAY] Display limpo!");
 }
 
 void drawScrollingMessage() {
@@ -198,6 +214,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   else if (String(topic) == TOPIC_DISPLAY_MSG) {
     showScrollingMessage(msg);
   }
+
+  else if (String(topic) == TOPIC_DISPLAY_CONTROL) {
+    msg.toUpperCase();
+    if (msg == "CLEAR" || msg == "LIMPAR") {
+      clearDisplay();
+      mqtt.publish(TOPIC_DISPLAY_CONTROL, "Display limpo!");
+    }
+  }
 }
 
 void ensureMqtt() {
@@ -208,6 +232,7 @@ void ensureMqtt() {
       mqtt.subscribe(TOPIC_BUZZER_CONTROL);
       mqtt.subscribe(TOPIC_LED_CONTROL);
       mqtt.subscribe(TOPIC_DISPLAY_MSG);
+      mqtt.subscribe(TOPIC_DISPLAY_CONTROL);
 
       if (displayOK) {
         display.clearDisplay();
@@ -227,14 +252,45 @@ void ensureMqtt() {
 
 void checkButtons() {
   int btnPins[6] = {BTN1_PIN, BTN2_PIN, BTN3_PIN, BTN4_PIN, BTN5_PIN, BTN6_PIN};
+  unsigned long now = millis();
+  
   for (int i = 0; i < 6; i++) {
     bool current = digitalRead(btnPins[i]);
+    String topic = String(TOPIC_BTN) + "/BOTAO_" + String(i + 1);
+    
+    // Detecta pressão inicial (HIGH -> LOW)
     if (lastBtn[i] == HIGH && current == LOW) {
-      String topic = String(TOPIC_BTN) + "/BOTAO_" + String(i + 1);
+      btnPressTime[i] = now;
+      btnHoldReported[i] = false;
       mqtt.publish(topic.c_str(), "PRESSIONADO");
-      Serial.println("[BOTAO] " + topic);
+      Serial.println("[BOTAO] " + topic + " PRESSIONADO");
       tone(BUZZER_PIN, 700 + (i * 50), 100);
     }
+    
+    // Botão está sendo segurado
+    else if (current == LOW && !btnHoldReported[i]) {
+      unsigned long holdDuration = now - btnPressTime[i];
+      if (holdDuration >= HOLD_TIME_MS) {
+        mqtt.publish(topic.c_str(), "SEGURANDO");
+        Serial.println("[BOTAO] " + topic + " SEGURANDO");
+        btnHoldReported[i] = true;
+        tone(BUZZER_PIN, 1000 + (i * 100), 200);
+      }
+    }
+    
+    // Botão foi solto
+    else if (lastBtn[i] == LOW && current == HIGH) {
+      unsigned long holdDuration = now - btnPressTime[i];
+      if (holdDuration >= HOLD_TIME_MS) {
+        mqtt.publish(topic.c_str(), "SOLTO_APOS_SEGURAR");
+        Serial.println("[BOTAO] " + topic + " SOLTO (segurado por " + String(holdDuration) + "ms)");
+      } else {
+        mqtt.publish(topic.c_str(), "SOLTO");
+        Serial.println("[BOTAO] " + topic + " SOLTO");
+      }
+      btnHoldReported[i] = false;
+    }
+    
     lastBtn[i] = current;
   }
 }

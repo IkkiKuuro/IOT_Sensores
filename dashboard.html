@@ -292,9 +292,28 @@
             box-shadow: 0 0 20px rgba(102, 126, 234, 0.6);
         }
 
+        .button-status.holding {
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            transform: scale(1.08);
+            border-color: #fff;
+            box-shadow: 0 0 25px rgba(255, 152, 0, 0.8);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
         .button-status.active .button-number,
         .button-status.active .button-state,
         .button-status.active .button-count {
+            color: white;
+        }
+
+        .button-status.holding .button-number,
+        .button-status.holding .button-state,
+        .button-status.holding .button-count {
             color: white;
         }
 
@@ -449,6 +468,9 @@
                     <input type="text" id="displayMsg" placeholder="Digite a mensagem...">
                     <button class="btn-blue" onclick="sendDisplayMessage()">📤 Enviar</button>
                 </div>
+                <div class="button-group" style="margin-top: 10px;">
+                    <button class="btn-red" onclick="clearDisplay()">🗑️ Limpar Display</button>
+                </div>
                 <div class="message-display" id="currentMessage">Nenhuma mensagem enviada</div>
             </div>
         </div>
@@ -479,6 +501,7 @@
             buzzerControl: 'IFCE_Iran/buzzer_control',
             buzzerStatus: 'IFCE_Iran/buzzer_status',
             displayMsg: 'IFCE_Iran/display_msg',
+            displayControl: 'IFCE_Iran/display_control',
             botoes: 'IFCE_Iran/botoes/#'
         };
 
@@ -570,22 +593,38 @@
             // Atualiza o estado
             btnStateElement.textContent = message;
             
-            // Incrementa contador
-            buttonCounts[btnNumber]++;
-            btnCountElement.textContent = buttonCounts[btnNumber];
+            // Remove classes anteriores
+            btnElement.classList.remove('active', 'holding');
             
-            // Adiciona classe active
-            btnElement.classList.add('active');
-            
-            // Remove a classe após 500ms
+            // Limpa timeout anterior
             if (buttonTimeouts[btnNumber]) {
                 clearTimeout(buttonTimeouts[btnNumber]);
             }
             
-            buttonTimeouts[btnNumber] = setTimeout(() => {
-                btnElement.classList.remove('active');
-                btnStateElement.textContent = 'Aguardando...';
-            }, 500);
+            // Trata diferentes estados
+            if (message === 'PRESSIONADO') {
+                buttonCounts[btnNumber]++;
+                btnCountElement.textContent = buttonCounts[btnNumber];
+                btnElement.classList.add('active');
+                
+                buttonTimeouts[btnNumber] = setTimeout(() => {
+                    btnElement.classList.remove('active');
+                    btnStateElement.textContent = 'Aguardando...';
+                }, 500);
+            }
+            else if (message === 'SEGURANDO') {
+                btnElement.classList.add('holding');
+                // Não remove automaticamente, só quando soltar
+            }
+            else if (message === 'SOLTO' || message === 'SOLTO_APOS_SEGURAR') {
+                btnElement.classList.remove('holding');
+                btnElement.classList.add('active');
+                
+                buttonTimeouts[btnNumber] = setTimeout(() => {
+                    btnElement.classList.remove('active');
+                    btnStateElement.textContent = 'Aguardando...';
+                }, 500);
+            }
         }
 
         function updateConnectionStatus(connected) {
@@ -661,6 +700,17 @@
                 }
             } else {
                 alert('Digite uma mensagem!');
+            }
+        }
+
+        function clearDisplay() {
+            if (client && client.connected) {
+                client.publish(TOPICS.displayControl, 'CLEAR');
+                document.getElementById('currentMessage').textContent = 'Display limpo!';
+                console.log('Display limpo');
+                addHistoryItem('🗑️ Display limpo');
+            } else {
+                alert('Não conectado ao broker MQTT!');
             }
         }
 
