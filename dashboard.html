@@ -118,11 +118,18 @@
 
         .rgb-preview {
             width: 100%;
-            height: 60px;
+            height: 80px;
             border-radius: 8px;
-            margin-top: 10px;
+            margin-top: 15px;
             border: 2px solid #ddd;
             transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            font-size: 1.2em;
         }
 
         .color-input-group {
@@ -133,11 +140,115 @@
         }
 
         input[type="color"] {
-            width: 60px;
-            height: 45px;
+            width: 80px;
+            height: 50px;
             border: 2px solid #ddd;
             border-radius: 8px;
             cursor: pointer;
+        }
+
+        .color-sliders {
+            margin-top: 15px;
+        }
+
+        .slider-container {
+            margin-bottom: 15px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .slider-value {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            border: none;
+        }
+
+        .preset-colors {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .preset-color {
+            width: 100%;
+            height: 50px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .preset-color:hover {
+            transform: scale(1.1);
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .color-mode-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .tab-button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .color-panel {
+            display: none;
+        }
+
+        .color-panel.active {
+            display: block;
         }
 
         .control-section {
@@ -454,15 +565,76 @@
         <div class="controls">
             <div class="control-section">
                 <div class="control-title">🎨 Controle de Cor RGB Personalizada</div>
-                <div class="color-input-group">
-                    <input type="color" id="colorPicker" value="#FF00FF">
-                    <input type="text" id="hexInput" placeholder="#RRGGBB" value="#FF00FF" maxlength="7">
-                    <button class="btn-purple" onclick="setRGBColor()">🎨 Aplicar Cor</button>
+                
+                <!-- Abas de modo -->
+                <div class="color-mode-tabs">
+                    <button class="tab-button active" onclick="switchColorMode('hsv')">HSV (Fácil)</button>
+                    <button class="tab-button" onclick="switchColorMode('picker')">Seletor</button>
+                    <button class="tab-button" onclick="switchColorMode('preset')">Pré-definidas</button>
                 </div>
-                <div class="rgb-preview" id="rgbPreview" style="background-color: #FF00FF;"></div>
-                <div style="margin-top: 10px; color: #666; font-size: 0.9em;">
-                    💡 Exemplos: #FF00FF (Rosa), #00FFFF (Ciano), #FFFF00 (Amarelo), #FF8000 (Laranja)
+
+                <!-- Painel HSV -->
+                <div id="hsvPanel" class="color-panel active">
+                    <div class="color-sliders">
+                        <div class="slider-container">
+                            <div class="slider-label">
+                                <span>🌈 Matiz (Cor)</span>
+                                <span class="slider-value" id="hueValue">0°</span>
+                            </div>
+                            <input type="range" id="hueSlider" min="0" max="360" value="300" oninput="updateFromHSV()">
+                        </div>
+                        
+                        <div class="slider-container">
+                            <div class="slider-label">
+                                <span>💧 Saturação (Intensidade)</span>
+                                <span class="slider-value" id="satValue">100%</span>
+                            </div>
+                            <input type="range" id="satSlider" min="0" max="100" value="100" oninput="updateFromHSV()">
+                        </div>
+                        
+                        <div class="slider-container">
+                            <div class="slider-label">
+                                <span>💡 Brilho</span>
+                                <span class="slider-value" id="valValue">100%</span>
+                            </div>
+                            <input type="range" id="valSlider" min="0" max="100" value="100" oninput="updateFromHSV()">
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Painel Seletor de Cor -->
+                <div id="pickerPanel" class="color-panel">
+                    <div class="color-input-group">
+                        <input type="color" id="colorPicker" value="#FF00FF">
+                        <input type="text" id="hexInput" placeholder="#RRGGBB" value="#FF00FF" maxlength="7">
+                    </div>
+                </div>
+
+                <!-- Painel Cores Pré-definidas -->
+                <div id="presetPanel" class="color-panel">
+                    <div class="preset-colors">
+                        <div class="preset-color" style="background-color: #FF0000;" onclick="setPresetColor('#FF0000')" title="Vermelho"></div>
+                        <div class="preset-color" style="background-color: #FF8000;" onclick="setPresetColor('#FF8000')" title="Laranja"></div>
+                        <div class="preset-color" style="background-color: #FFFF00;" onclick="setPresetColor('#FFFF00')" title="Amarelo"></div>
+                        <div class="preset-color" style="background-color: #00FF00;" onclick="setPresetColor('#00FF00')" title="Verde"></div>
+                        <div class="preset-color" style="background-color: #00FFFF;" onclick="setPresetColor('#00FFFF')" title="Ciano"></div>
+                        <div class="preset-color" style="background-color: #0000FF;" onclick="setPresetColor('#0000FF')" title="Azul"></div>
+                        <div class="preset-color" style="background-color: #8000FF;" onclick="setPresetColor('#8000FF')" title="Roxo"></div>
+                        <div class="preset-color" style="background-color: #FF00FF;" onclick="setPresetColor('#FF00FF')" title="Magenta"></div>
+                        <div class="preset-color" style="background-color: #FF1493;" onclick="setPresetColor('#FF1493')" title="Rosa Escuro"></div>
+                        <div class="preset-color" style="background-color: #FFC0CB;" onclick="setPresetColor('#FFC0CB')" title="Rosa"></div>
+                        <div class="preset-color" style="background-color: #FFFFFF;" onclick="setPresetColor('#FFFFFF')" title="Branco"></div>
+                        <div class="preset-color" style="background-color: #FFD700;" onclick="setPresetColor('#FFD700')" title="Dourado"></div>
+                    </div>
+                </div>
+
+                <!-- Preview e Aplicar -->
+                <div class="rgb-preview" id="rgbPreview" style="background-color: #FF00FF;">
+                    <span id="previewText">#FF00FF</span>
+                </div>
+                <button class="btn-purple" onclick="applyCurrentColor()" style="width: 100%; margin-top: 10px; font-size: 1.1em;">
+                    ✨ Aplicar Cor
+                </button>
             </div>
 
             <div class="control-section">
@@ -547,8 +719,9 @@
         let historyItems = [];
         let buttonCounts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0};
         let buttonTimeouts = {};
+        let currentColor = '#FF00FF';
 
-        // Conectar ao broker MQTT
+        // Converte HSV para RGB
         function connectMQTT() {
             const clientId = 'dashboard_' + Math.random().toString(16).substr(2, 8);
             
@@ -752,31 +925,6 @@
             }
         }
 
-        function setRGBColor() {
-            const hexInput = document.getElementById('hexInput').value.trim();
-            let hexColor = hexInput;
-            
-            // Adiciona # se não tiver
-            if (!hexColor.startsWith('#')) {
-                hexColor = '#' + hexColor;
-            }
-            
-            // Valida formato
-            const hexRegex = /^#[0-9A-Fa-f]{6}$/;
-            if (!hexRegex.test(hexColor)) {
-                alert('Formato inválido! Use #RRGGBB (exemplo: #FF00FF)');
-                return;
-            }
-            
-            if (client && client.connected) {
-                client.publish(TOPICS.ledRgb, hexColor);
-                console.log('Cor RGB definida:', hexColor);
-                addHistoryItem(`🎨 Cor RGB: ${hexColor.toUpperCase()}`);
-            } else {
-                alert('Não conectado ao broker MQTT!');
-            }
-        }
-
         function addHistoryItem(text) {
             const timestamp = new Date().toLocaleTimeString();
             historyItems.unshift({ text, timestamp });
@@ -803,15 +951,18 @@
         window.addEventListener('load', function() {
             connectMQTT();
             
+            // Inicializa sliders HSV
+            updateFromHSV();
+            
             // Sincroniza color picker com input de texto
             const colorPicker = document.getElementById('colorPicker');
             const hexInput = document.getElementById('hexInput');
-            const rgbPreview = document.getElementById('rgbPreview');
             
             colorPicker.addEventListener('input', function() {
                 const color = this.value.toUpperCase();
                 hexInput.value = color;
-                rgbPreview.style.backgroundColor = color;
+                currentColor = color;
+                updateColorPreview(color);
             });
             
             hexInput.addEventListener('input', function() {
@@ -820,8 +971,8 @@
                     value = '#' + value;
                 }
                 if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-                    colorPicker.value = value;
-                    rgbPreview.style.backgroundColor = value;
+                    currentColor = value.toUpperCase();
+                    updateColorPreview(currentColor);
                 }
             });
         });

@@ -155,45 +155,45 @@ void controlLED(String color, String action) {
   if (color == "RED" || color == "VERMELHO" || color == "ALL") {
     if (action == "ON") {
       ledRedState = true;
-      ledcWrite(LED_R_CHANNEL, 255);
+      ledcWrite(LED_R_PIN, 255);
     }
     else if (action == "OFF") {
       ledRedState = false;
-      ledcWrite(LED_R_CHANNEL, 0);
+      ledcWrite(LED_R_PIN, 0);
     }
     else if (action == "TOGGLE") {
       ledRedState = !ledRedState;
-      ledcWrite(LED_R_CHANNEL, ledRedState ? 255 : 0);
+      ledcWrite(LED_R_PIN, ledRedState ? 255 : 0);
     }
   }
   
   if (color == "GREEN" || color == "VERDE" || color == "ALL") {
     if (action == "ON") {
       ledGreenState = true;
-      ledcWrite(LED_G_CHANNEL, 255);
+      ledcWrite(LED_G_PIN, 255);
     }
     else if (action == "OFF") {
       ledGreenState = false;
-      ledcWrite(LED_G_CHANNEL, 0);
+      ledcWrite(LED_G_PIN, 0);
     }
     else if (action == "TOGGLE") {
       ledGreenState = !ledGreenState;
-      ledcWrite(LED_G_CHANNEL, ledGreenState ? 255 : 0);
+      ledcWrite(LED_G_PIN, ledGreenState ? 255 : 0);
     }
   }
   
   if (color == "BLUE" || color == "AZUL" || color == "ALL") {
     if (action == "ON") {
       ledBlueState = true;
-      ledcWrite(LED_B_CHANNEL, 255);
+      ledcWrite(LED_B_PIN, 255);
     }
     else if (action == "OFF") {
       ledBlueState = false;
-      ledcWrite(LED_B_CHANNEL, 0);
+      ledcWrite(LED_B_PIN, 0);
     }
     else if (action == "TOGGLE") {
       ledBlueState = !ledBlueState;
-      ledcWrite(LED_B_CHANNEL, ledBlueState ? 255 : 0);
+      ledcWrite(LED_B_PIN, ledBlueState ? 255 : 0);
     }
   }
   
@@ -220,6 +220,9 @@ void setRGBColor(String hexColor) {
     return;
   }
   
+  // Converte para maiúsculas
+  hexColor.toUpperCase();
+  
   // Converte hex para RGB
   long number = strtol(hexColor.c_str(), NULL, 16);
   int r = (number >> 16) & 0xFF;
@@ -227,9 +230,9 @@ void setRGBColor(String hexColor) {
   int b = number & 0xFF;
   
   // Define PWM para cada canal
-  ledcWrite(LED_R_CHANNEL, r);
-  ledcWrite(LED_G_CHANNEL, g);
-  ledcWrite(LED_B_CHANNEL, b);
+  ledcWrite(LED_R_PIN, r);
+  ledcWrite(LED_G_PIN, g);
+  ledcWrite(LED_B_PIN, b);
   
   // Atualiza estados
   ledRedState = (r > 0);
@@ -237,7 +240,7 @@ void setRGBColor(String hexColor) {
   ledBlueState = (b > 0);
   
   // Publica status
-  String status = "RGB: #" + hexColor.toUpperCase() + " (R:" + String(r) + " G:" + String(g) + " B:" + String(b) + ")";
+  String status = "RGB: #" + hexColor + " (R:" + String(r) + " G:" + String(g) + " B:" + String(b) + ")";
   mqtt.publish(TOPIC_LED_STATUS, status.c_str());
   Serial.println("[LED] " + status);
 }
@@ -475,19 +478,15 @@ void setup() {
   pinMode(LED_B_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
 
-  // Configura PWM para LEDs RGB
-  ledcSetup(LED_R_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
-  ledcSetup(LED_G_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
-  ledcSetup(LED_B_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
-  
-  ledcAttachPin(LED_R_PIN, LED_R_CHANNEL);
-  ledcAttachPin(LED_G_PIN, LED_G_CHANNEL);
-  ledcAttachPin(LED_B_PIN, LED_B_CHANNEL);
+  // Configura PWM para LEDs RGB (compatível com ESP32 v3.x)
+  ledcAttach(LED_R_PIN, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttach(LED_G_PIN, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttach(LED_B_PIN, PWM_FREQ, PWM_RESOLUTION);
   
   // Inicia LEDs desligados
-  ledcWrite(LED_R_CHANNEL, 0);
-  ledcWrite(LED_G_CHANNEL, 0);
-  ledcWrite(LED_B_CHANNEL, 0);
+  ledcWrite(LED_R_PIN, 0);
+  ledcWrite(LED_G_PIN, 0);
+  ledcWrite(LED_B_PIN, 0);
 
   pinMode(BTN1_PIN, INPUT_PULLUP);
   pinMode(BTN2_PIN, INPUT_PULLUP);
