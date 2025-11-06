@@ -116,6 +116,30 @@
             margin-bottom: 20px;
         }
 
+        .rgb-preview {
+            width: 100%;
+            height: 60px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 2px solid #ddd;
+            transition: all 0.3s ease;
+        }
+
+        .color-input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        input[type="color"] {
+            width: 60px;
+            height: 45px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
         .control-section {
             margin-bottom: 25px;
         }
@@ -429,7 +453,20 @@
         <!-- Controles -->
         <div class="controls">
             <div class="control-section">
-                <div class="control-title">💡 Controle de LEDs</div>
+                <div class="control-title">🎨 Controle de Cor RGB Personalizada</div>
+                <div class="color-input-group">
+                    <input type="color" id="colorPicker" value="#FF00FF">
+                    <input type="text" id="hexInput" placeholder="#RRGGBB" value="#FF00FF" maxlength="7">
+                    <button class="btn-purple" onclick="setRGBColor()">🎨 Aplicar Cor</button>
+                </div>
+                <div class="rgb-preview" id="rgbPreview" style="background-color: #FF00FF;"></div>
+                <div style="margin-top: 10px; color: #666; font-size: 0.9em;">
+                    💡 Exemplos: #FF00FF (Rosa), #00FFFF (Ciano), #FFFF00 (Amarelo), #FF8000 (Laranja)
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="control-title">💡 Controle de LEDs Individual</div>
                 <div style="margin-bottom: 15px;">
                     <strong>Status:</strong>
                     Vermelho <span class="led-indicator" id="ledRed"></span>
@@ -497,6 +534,7 @@
             umidade: 'IFCE_Iran/umidade',
             luminosidade: 'IFCE_Iran/luminosidade',
             ledControl: 'IFCE_Iran/led_control',
+            ledRgb: 'IFCE_Iran/led_rgb',
             ledStatus: 'IFCE_Iran/led_status',
             buzzerControl: 'IFCE_Iran/buzzer_control',
             buzzerStatus: 'IFCE_Iran/buzzer_status',
@@ -714,6 +752,31 @@
             }
         }
 
+        function setRGBColor() {
+            const hexInput = document.getElementById('hexInput').value.trim();
+            let hexColor = hexInput;
+            
+            // Adiciona # se não tiver
+            if (!hexColor.startsWith('#')) {
+                hexColor = '#' + hexColor;
+            }
+            
+            // Valida formato
+            const hexRegex = /^#[0-9A-Fa-f]{6}$/;
+            if (!hexRegex.test(hexColor)) {
+                alert('Formato inválido! Use #RRGGBB (exemplo: #FF00FF)');
+                return;
+            }
+            
+            if (client && client.connected) {
+                client.publish(TOPICS.ledRgb, hexColor);
+                console.log('Cor RGB definida:', hexColor);
+                addHistoryItem(`🎨 Cor RGB: ${hexColor.toUpperCase()}`);
+            } else {
+                alert('Não conectado ao broker MQTT!');
+            }
+        }
+
         function addHistoryItem(text) {
             const timestamp = new Date().toLocaleTimeString();
             historyItems.unshift({ text, timestamp });
@@ -739,6 +802,28 @@
         // Inicializar ao carregar a página
         window.addEventListener('load', function() {
             connectMQTT();
+            
+            // Sincroniza color picker com input de texto
+            const colorPicker = document.getElementById('colorPicker');
+            const hexInput = document.getElementById('hexInput');
+            const rgbPreview = document.getElementById('rgbPreview');
+            
+            colorPicker.addEventListener('input', function() {
+                const color = this.value.toUpperCase();
+                hexInput.value = color;
+                rgbPreview.style.backgroundColor = color;
+            });
+            
+            hexInput.addEventListener('input', function() {
+                let value = this.value.trim();
+                if (!value.startsWith('#')) {
+                    value = '#' + value;
+                }
+                if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+                    colorPicker.value = value;
+                    rgbPreview.style.backgroundColor = value;
+                }
+            });
         });
 
         // Permitir envio de mensagem com Enter

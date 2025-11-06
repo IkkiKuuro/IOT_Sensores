@@ -14,12 +14,15 @@ const char* WIFI_PASS = "IFCE1234";
 //IFCE_Iran/display_msg <mensagem>
 //IFCE_Iran/display_control CLEAR (limpa o display)
 //IFCE_Iran/led_control RED/GREEN/BLUE/ALL ON/OFF/TOGGLE
+//IFCE_Iran/led_rgb #RRGGBB (ex: #FF00FF para rosa/magenta)
 //Exemplos: 
 //  IFCE_Iran/led_control RED ON
 //  IFCE_Iran/led_control GREEN OFF
 //  IFCE_Iran/led_control BLUE TOGGLE
 //  IFCE_Iran/led_control ALL ON
 //  IFCE_Iran/display_control CLEAR
+//  IFCE_Iran/led_rgb #FF00FF (rosa)
+//  IFCE_Iran/led_rgb #00FFFF (ciano)
 
 
 
@@ -38,6 +41,7 @@ const char* TOPIC_BTN = "IFCE_Iran/botoes";
 const char* TOPIC_BUZZER_CONTROL = "IFCE_Iran/buzzer_control";
 const char* TOPIC_BUZZER_STATUS = "IFCE_Iran/buzzer_status";
 const char* TOPIC_LED_CONTROL = "IFCE_Iran/led_control";
+const char* TOPIC_LED_RGB = "IFCE_Iran/led_rgb";
 const char* TOPIC_LED_STATUS = "IFCE_Iran/led_status";
 const char* TOPIC_DISPLAY_MSG = "IFCE_Iran/display_msg";
 const char* TOPIC_DISPLAY_CONTROL = "IFCE_Iran/display_control";
@@ -62,6 +66,13 @@ PubSubClient mqtt(espClient);
 #define BTN6_PIN 7
 
 #define LDR_PIN 1  // Pino analógico para sensor de luminosidade (LDR)
+
+// ====== PWM para LEDs RGB ======
+#define LED_R_CHANNEL 0
+#define LED_G_CHANNEL 1
+#define LED_B_CHANNEL 2
+#define PWM_FREQ 5000
+#define PWM_RESOLUTION 8  // 0-255
 
 // ====== DISPLAY OLED ======
 #define OLED_SDA_PIN 8  // Se não funcionar, teste com 41
@@ -142,24 +153,48 @@ void controlLED(String color, String action) {
   action.toUpperCase();
   
   if (color == "RED" || color == "VERMELHO" || color == "ALL") {
-    if (action == "ON") ledRedState = true;
-    else if (action == "OFF") ledRedState = false;
-    else if (action == "TOGGLE") ledRedState = !ledRedState;
-    digitalWrite(LED_R_PIN, ledRedState);
+    if (action == "ON") {
+      ledRedState = true;
+      ledcWrite(LED_R_CHANNEL, 255);
+    }
+    else if (action == "OFF") {
+      ledRedState = false;
+      ledcWrite(LED_R_CHANNEL, 0);
+    }
+    else if (action == "TOGGLE") {
+      ledRedState = !ledRedState;
+      ledcWrite(LED_R_CHANNEL, ledRedState ? 255 : 0);
+    }
   }
   
   if (color == "GREEN" || color == "VERDE" || color == "ALL") {
-    if (action == "ON") ledGreenState = true;
-    else if (action == "OFF") ledGreenState = false;
-    else if (action == "TOGGLE") ledGreenState = !ledGreenState;
-    digitalWrite(LED_G_PIN, ledGreenState);
+    if (action == "ON") {
+      ledGreenState = true;
+      ledcWrite(LED_G_CHANNEL, 255);
+    }
+    else if (action == "OFF") {
+      ledGreenState = false;
+      ledcWrite(LED_G_CHANNEL, 0);
+    }
+    else if (action == "TOGGLE") {
+      ledGreenState = !ledGreenState;
+      ledcWrite(LED_G_CHANNEL, ledGreenState ? 255 : 0);
+    }
   }
   
   if (color == "BLUE" || color == "AZUL" || color == "ALL") {
-    if (action == "ON") ledBlueState = true;
-    else if (action == "OFF") ledBlueState = false;
-    else if (action == "TOGGLE") ledBlueState = !ledBlueState;
-    digitalWrite(LED_B_PIN, ledBlueState);
+    if (action == "ON") {
+      ledBlueState = true;
+      ledcWrite(LED_B_CHANNEL, 255);
+    }
+    else if (action == "OFF") {
+      ledBlueState = false;
+      ledcWrite(LED_B_CHANNEL, 0);
+    }
+    else if (action == "TOGGLE") {
+      ledBlueState = !ledBlueState;
+      ledcWrite(LED_B_CHANNEL, ledBlueState ? 255 : 0);
+    }
   }
   
   // Publica status atualizado
@@ -169,6 +204,40 @@ void controlLED(String color, String action) {
   status += ledGreenState ? "ON" : "OFF";
   status += " B:";
   status += ledBlueState ? "ON" : "OFF";
+  mqtt.publish(TOPIC_LED_STATUS, status.c_str());
+  Serial.println("[LED] " + status);
+}
+
+void setRGBColor(String hexColor) {
+  // Remove # se existir
+  if (hexColor.startsWith("#")) {
+    hexColor = hexColor.substring(1);
+  }
+  
+  // Valida formato
+  if (hexColor.length() != 6) {
+    mqtt.publish(TOPIC_LED_STATUS, "Formato invalido! Use #RRGGBB");
+    return;
+  }
+  
+  // Converte hex para RGB
+  long number = strtol(hexColor.c_str(), NULL, 16);
+  int r = (number >> 16) & 0xFF;
+  int g = (number >> 8) & 0xFF;
+  int b = number & 0xFF;
+  
+  // Define PWM para cada canal
+  ledcWrite(LED_R_CHANNEL, r);
+  ledcWrite(LED_G_CHANNEL, g);
+  ledcWrite(LED_B_CHANNEL, b);
+  
+  // Atualiza estados
+  ledRedState = (r > 0);
+  ledGreenState = (g > 0);
+  ledBlueState = (b > 0);
+  
+  // Publica status
+  String status = "RGB: #" + hexColor.toUpperCase() + " (R:" + String(r) + " G:" + String(g) + " B:" + String(b) + ")";
   mqtt.publish(TOPIC_LED_STATUS, status.c_str());
   Serial.println("[LED] " + status);
 }
@@ -211,6 +280,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     }
   }
 
+  else if (String(topic) == TOPIC_LED_RGB) {
+    setRGBColor(msg);
+  }
+
   else if (String(topic) == TOPIC_DISPLAY_MSG) {
     showScrollingMessage(msg);
   }
@@ -231,6 +304,7 @@ void ensureMqtt() {
       Serial.println(" conectado!");
       mqtt.subscribe(TOPIC_BUZZER_CONTROL);
       mqtt.subscribe(TOPIC_LED_CONTROL);
+      mqtt.subscribe(TOPIC_LED_RGB);
       mqtt.subscribe(TOPIC_DISPLAY_MSG);
       mqtt.subscribe(TOPIC_DISPLAY_CONTROL);
 
@@ -258,7 +332,7 @@ void checkButtons() {
     bool current = digitalRead(btnPins[i]);
     String topic = String(TOPIC_BTN) + "/BOTAO_" + String(i + 1);
     
-    // Detecta pressão inicial (HIGH -> LOW)
+    // Detecta pressão inicial (LOW = pressionado com INPUT_PULLUP)
     if (lastBtn[i] == HIGH && current == LOW) {
       btnPressTime[i] = now;
       btnHoldReported[i] = false;
@@ -267,7 +341,7 @@ void checkButtons() {
       tone(BUZZER_PIN, 700 + (i * 50), 100);
     }
     
-    // Botão está sendo segurado
+    // Botão está sendo segurado (LOW = pressionado)
     else if (current == LOW && !btnHoldReported[i]) {
       unsigned long holdDuration = now - btnPressTime[i];
       if (holdDuration >= HOLD_TIME_MS) {
@@ -278,7 +352,7 @@ void checkButtons() {
       }
     }
     
-    // Botão foi solto
+    // Botão foi solto (HIGH = solto)
     else if (lastBtn[i] == LOW && current == HIGH) {
       unsigned long holdDuration = now - btnPressTime[i];
       if (holdDuration >= HOLD_TIME_MS) {
@@ -400,6 +474,20 @@ void setup() {
   pinMode(LED_G_PIN, OUTPUT);
   pinMode(LED_B_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
+
+  // Configura PWM para LEDs RGB
+  ledcSetup(LED_R_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  ledcSetup(LED_G_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  ledcSetup(LED_B_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  
+  ledcAttachPin(LED_R_PIN, LED_R_CHANNEL);
+  ledcAttachPin(LED_G_PIN, LED_G_CHANNEL);
+  ledcAttachPin(LED_B_PIN, LED_B_CHANNEL);
+  
+  // Inicia LEDs desligados
+  ledcWrite(LED_R_CHANNEL, 0);
+  ledcWrite(LED_G_CHANNEL, 0);
+  ledcWrite(LED_B_CHANNEL, 0);
 
   pinMode(BTN1_PIN, INPUT_PULLUP);
   pinMode(BTN2_PIN, INPUT_PULLUP);
